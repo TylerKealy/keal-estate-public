@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!-- jQuery -->
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+
+<!-- Select2 CSS -->
+<link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css" rel="stylesheet" />
+
+<!-- Select2 JS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
+
+  <style>
+    #map {
+      height: 400px;
+      width: 100%;
+    }
+    #loading-screen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(255, 255, 255, 0.7);
+      display: none; /* Initially hidden */
+      z-index: 999; /* On top of other elements */
+      text-align: center;
+      padding-top: 180px; /* Centering the text vertically */
+    }
+    .loader { /* Optional loading animation */
+  border: 5px solid #f3f3f3;
+  border-radius: 50%;
+  border-top: 5px solid #3498db;
+  width: 40px;
+  height: 40px;
+  animation: spin 2s linear infinite;
+  margin: 0 auto;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+  </style>
+</head>
+<body>
+  
+    <div id="input-container">
+        <label for="zip-code">ZIP Code:</label>
+        <input type="text" id="zip-code" maxlength="5" pattern="[0-9]{5}" required>
+        <label for="listings-count">Number of Listings:</label>
+        <input type="number" id="listings-count" min="1" required>   
+        <label for="home-type">Excluded Home Types:</label>
+        <select id="home-type" multiple>
+          <option value="singleFamily">SingleFamily</option>
+          <option value="multiFamily">MultiFamily</option>
+          <option value="condo">Condo</option>
+        </select>     
+        <button id="go-button" disabled>Go</button>
+    </div>
+    <div id="map"></div>
+    <div id="loading-screen">Loading, please wait...</div> <!-- Loading screen -->
+
+  <script async defer src="https://maps.googleapis.com/maps/api/js?key={{ api_key }}"></script>
+
+  <script>
+    let map;
+
+    document.getElementById('zip-code').addEventListener('input', validateInput);
+    document.getElementById('listings-count').addEventListener('input', validateInput);
+    const homeTypeDropdown = document.getElementById('home-type');
+
+      document.getElementById('go-button').addEventListener('click', function() {
+        const zipCode = String(document.getElementById('zip-code').value);
+        console.log(zipCode)
+        const listingsCount = document.getElementById('listings-count').value;
+        const excludedHomeTypes = Array.from(homeTypeDropdown.options)
+        .filter(option => option.selected)
+        .map(option => option.value);
+        fetchBackend(zipCode, listingsCount, excludedHomeTypes);
+      });
+      
+    function validateInput() {
+      const zipCode = document.getElementById('zip-code').value;
+      const listingsCount = document.getElementById('listings-count').value;
+      const goButton = document.getElementById('go-button');
+      goButton.disabled = zipCode.length !== 5 || listingsCount <= 0;
+    }
+
+    function fetchBackend(zipCode, listingsCount, excludedHomeTypes) {
+      // Show the loading screen
+      document.getElementById('loading-screen').style.display = 'block';
+      console.log("Fetching data for ZIP code:", zipCode, "and listings count:", listingsCount, "and excluded home types:", excludedHomeTypes);
+      
+      const excludedHomeTypesParams = excludedHomeTypes.map(type => `excludedHomeTypes=${type}`).join('&');
+
+      // Fetch the marker data from the backend
+      fetch(`/request-markers/${zipCode}/${listingsCount}?${excludedHomeTypesParams}`)
+        .then(response => response.json())
+        .then(markers => {
+          // Hide the loading screen
+          document.getElementById('loading-screen').style.display = 'none';
+
+          initMap(markers);
+        });
+    }
+
+    function initMap(markers) {
+      map = new google.maps.Map(document.getElementById('map'), {
+        center: {lat: -34.397, lng: 150.644},
+        zoom: 8
+      });
+      
+    console.log("JavaScript code is running");
+    // When the page has finished loading...
+  // Fetch the marker data from the backend
+      // For each marker...
+      for (let marker of markers) {
+        // Create a new marker on the map
+        let iconUrl = '';
+        console.log("marker.rating: " + marker.rating)
+        let size = 50;
+        switch(marker.rating) {
+          case 0:
+            iconUrl = "/static/images/neutral.png"; // replace with your image path
+            break;
+          case 1:
+            iconUrl = "/static/images/good.png";
+            break;
+          case 2:
+            iconUrl = "/static/images/great.png";
+            size = 75;
+            break;
+          case -1:
+            iconUrl = "/static/images/bad.png";
+            break;
+          default:
+            iconUrl = "/static/images/neutral.png"; // replace with your default image path
+        }
+
+        let googleMarker = new google.maps.Marker({
+          position: { lat: marker.geocode.lat, lng: marker.geocode.lng },
+          map: map,
+          title: marker.address.concat(" ") + marker.cashflow,
+          icon: {
+          url: iconUrl,
+          scaledSize: new google.maps.Size(size, size),  // size
+        }
+          // Use other marker data as needed...
+        });
+
+        googleMarker.addListener('click', function() {
+      window.open("https://zillow.com".concat(marker.listingURL), '_blank');  
+});
+      // You might also want to adjust the map's center and zoom level here...
+      
+      // Calculate the sum of all latitudes and longitudes
+      let latSum = 0, lngSum = 0;
+      for (let marker of markers) {
+          latSum += marker.geocode.lat;
+          lngSum += marker.geocode.lng;
+      }
+
+      // Calculate the average latitude and longitude
+      let avgLat = latSum / markers.length;
+      let avgLng = lngSum / markers.length;
+
+      // Set the center to the average position
+      let avgLatLng = new google.maps.LatLng(avgLat, avgLng);
+      map.setCenter(avgLatLng);
+    };
+
+
+};
+
+$(document).ready(function() {
+  $('#home-type').select2();
+});
+  </script>
+</body>
+</html>
